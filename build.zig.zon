@@ -1,6 +1,12 @@
 .{
     .name = .injector,
     .version = "0.0.0",
+    .dependencies = .{
+        .zigwin32 = .{
+            .url = "git+https://github.com/marlersoft/zigwin32#d21b419d808215e1f82605fdaddc49750bfa3bca",
+            .hash = "zigwin32-25.0.28-preview-AAAAAI0J-wP-8_KKo4Yjr33XLhVhlJmeagGUedByaOnX",
+        },
+    },
     .fingerprint = 0xafb77859cc754cab,
     .minimum_zig_version = "0.14.0",
     .paths = .{

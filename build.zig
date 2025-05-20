@@ -15,6 +15,15 @@ pub fn build(b: *std.Build) void {
         .root_module = exe_mod,
     });
 
+    exe.linkSystemLibrary("user32");
+
+    const win32 = b.dependency("zigwin32", .{
+        // .target = target,
+        // .optimize = optimize,
+    });
+
+    exe.root_module.addImport("win32", win32.module("win32"));
+
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
