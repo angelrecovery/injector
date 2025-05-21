@@ -16,6 +16,7 @@ pub fn build(b: *std.Build) void {
     });
 
     exe.linkSystemLibrary("user32");
+    exe.linkSystemLibrary("kernel32");
 
     const win32 = b.dependency("zigwin32", .{
         // .target = target,
