@@ -8,7 +8,7 @@ lib: []const u8 = undefined,
 
 /// Name of the injector executable on disk
 /// Used for the help message
-// var name_on_disk: []const u8 = undefined;
+pub var name_on_disk: []const u8 = undefined;
 
 pub const ParseError = error{
     FailedAlloc,
@@ -24,7 +24,7 @@ pub fn parse(alloc: std.mem.Allocator) ParseError!Args {
     defer args.deinit();
 
     // This should be the first argument
-    // name_on_disk = std.fs.path.stem(std.fs.path.basename(args.next() orelse "injector"));
+    name_on_disk = alloc.dupe(u8, std.fs.path.stem(std.fs.path.basename(args.next().?))) catch "injector";
 
     var parsed: Args = undefined;
 

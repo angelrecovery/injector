@@ -37,7 +37,6 @@ pub fn main() !void {
     };
 }
 
-fn printUsage() void {
-    std.debug.print("Usage: {s} --target <pid> --lib <shared_library_path>\n\n", .{Args.name_on_disk});
-    std.debug.print("Inject a shared library into a running process\n", .{});
+inline fn printUsage() void {
+    std.debug.print("\nUsage: {s} --target <pid> --lib <shared_library_path>\n", .{Args.name_on_disk});
 }
