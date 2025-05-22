@@ -1,5 +1,4 @@
 const std = @import("std");
-const cli = @import("cli.zig");
 const win32 = @import("win32").everything;
 
 pub const PidType = u32;
@@ -46,7 +45,7 @@ inline fn closeHandle(handle: ?win32.HANDLE) void {
 }
 
 fn checkLlThreadFinished(handle: win32.HANDLE) void {
-    cli.info("waiting on remote thread...", .{});
+    std.log.info("waiting on remote thread...", .{});
 
     while (true) {
         defer std.debug.print("\n", .{});
@@ -55,7 +54,7 @@ fn checkLlThreadFinished(handle: win32.HANDLE) void {
         std.debug.print(".", .{});
 
         if (win32.GetExitCodeThread(handle, &ll_remote_thread_exit_code) == 0) {
-            cli.warning("\nfailed to get exit code of remote thread\n", .{});
+            std.log.warn("\nfailed to get exit code of remote thread\n", .{});
             break;
         }
 
@@ -154,7 +153,7 @@ pub fn loadLibraryInject(pid: PidType, lib: []const u8, method: ThreadMethod) !v
     defer {
         const free_status = win32.VirtualFreeEx(process, path_alloc, 0, win32.MEM_RELEASE);
         if (free_status == 0) {
-            cli.warning("failed to free memory in target for sl path\n", .{});
+            std.log.warn("failed to free memory in target for sl path\n", .{});
         }
     }
 
@@ -180,8 +179,8 @@ pub fn loadLibraryInject(pid: PidType, lib: []const u8, method: ThreadMethod) !v
     }
 
     if (ll_remote_thread_exit_code != 0) {
-        cli.warning("remote thread exited with code {d}, the injection may have failed\n", .{ll_remote_thread_exit_code});
+        std.log.warn("remote thread exited with code {d}, the injection may have failed\n", .{ll_remote_thread_exit_code});
     }
 
-    cli.info("finished\n", .{});
+    std.log.warn("finished\n", .{});
 }

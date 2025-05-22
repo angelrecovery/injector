@@ -10,14 +10,14 @@ lib: []const u8 = undefined,
 /// Used for the help message
 // var name_on_disk: []const u8 = undefined;
 
-pub const Error = error{
+pub const ParseError = error{
     FailedAlloc,
     InvalidTarget,
     MissingPid,
     MissingLib,
 };
 
-pub fn parse(alloc: std.mem.Allocator) !Args {
+pub fn parse(alloc: std.mem.Allocator) ParseError!Args {
     var args = std.process.argsWithAllocator(alloc) catch {
         return error.FailedAlloc;
     };
