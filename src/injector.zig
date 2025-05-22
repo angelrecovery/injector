@@ -54,7 +54,7 @@ fn checkLlThreadFinished(handle: win32.HANDLE) void {
         std.debug.print(".", .{});
 
         if (win32.GetExitCodeThread(handle, &ll_remote_thread_exit_code) == 0) {
-            std.log.warn("\nfailed to get exit code of remote thread\n", .{});
+            std.log.warn("\nfailed to get exit code of remote thread", .{});
             break;
         }
 
@@ -153,7 +153,7 @@ pub fn loadLibraryInject(pid: PidType, lib: []const u8, method: ThreadMethod) !v
     defer {
         const free_status = win32.VirtualFreeEx(process, path_alloc, 0, win32.MEM_RELEASE);
         if (free_status == 0) {
-            std.log.warn("failed to free memory in target for sl path\n", .{});
+            std.log.warn("failed to free memory in target for sl path", .{});
         }
     }
 
@@ -179,8 +179,8 @@ pub fn loadLibraryInject(pid: PidType, lib: []const u8, method: ThreadMethod) !v
     }
 
     if (ll_remote_thread_exit_code != 0) {
-        std.log.warn("remote thread exited with code {d}, the injection may have failed\n", .{ll_remote_thread_exit_code});
+        std.log.warn("remote thread exited with code {d}, the injection may have failed", .{ll_remote_thread_exit_code});
     }
 
-    std.log.warn("finished\n", .{});
+    std.log.info("finished", .{});
 }
