@@ -2,13 +2,15 @@ const std = @import("std");
 const cli = @import("cli.zig");
 const injector = @import("injector.zig");
 
+const Args = @import("Args.zig");
+
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
 
     const alloc = arena.allocator();
 
-    const args = cli.parseArgs(alloc) catch |err| {
+    const args = Args.parse(alloc) catch |err| {
         switch (err) {
             error.FailedAlloc => cli.err("failed to allocate memory for args\n", .{}),
             error.MissingLib => cli.errWithHelp("no shared library supplied\n", .{}),
