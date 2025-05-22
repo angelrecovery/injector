@@ -9,10 +9,5 @@
     },
     .fingerprint = 0xafb77859cc754cab,
     .minimum_zig_version = "0.14.0",
-    .paths = .{
-        "build.zig",
-        "build.zig.zon",
-        "src",
-        "LICENSE",
-    },
+    .paths = .{ "build.zig", "build.zig.zon", "src", "LICENSE", "README.md" },
 }
