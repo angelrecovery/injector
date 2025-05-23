@@ -15,26 +15,28 @@ pub fn build(b: *std.Build) void {
         .root_module = exe_mod,
     });
 
-    exe.linkSystemLibrary("user32");
-    exe.linkSystemLibrary("kernel32");
+    // win32
+    {
+        const win32 = b.dependency("zigwin32", .{});
 
-    const win32 = b.dependency("zigwin32", .{
-        // .target = target,
-        // .optimize = optimize,
-    });
+        exe.linkSystemLibrary("user32");
+        exe.linkSystemLibrary("kernel32");
 
-    exe.root_module.addImport("win32", win32.module("win32"));
+        exe.root_module.addImport("win32", win32.module("win32"));
+    }
 
     b.installArtifact(exe);
 
-    const run_cmd = b.addRunArtifact(exe);
+    // Run runs the injector
+    {
+        const run_cmd = b.addRunArtifact(exe);
+        run_cmd.step.dependOn(b.getInstallStep());
 
-    run_cmd.step.dependOn(b.getInstallStep());
+        if (b.args) |args| {
+            run_cmd.addArgs(args);
+        }
 
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
+        const run_step = b.step("run", "Run the app");
+        run_step.dependOn(&run_cmd.step);
     }
-
-    const run_step = b.step("run", "Run the app");
-    run_step.dependOn(&run_cmd.step);
 }
