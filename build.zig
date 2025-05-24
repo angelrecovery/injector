@@ -15,7 +15,7 @@ pub fn build(b: *std.Build) void {
         .root_module = exe_mod,
     });
 
-    // win32
+    // Win32
     {
         const win32 = b.dependency("zigwin32", .{});
 
