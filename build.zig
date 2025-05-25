@@ -17,11 +17,10 @@ pub fn build(b: *std.Build) void {
 
     // Win32
     {
-        const win32 = b.dependency("zigwin32", .{});
-
         exe.linkSystemLibrary("user32");
         exe.linkSystemLibrary("kernel32");
 
+        const win32 = b.dependency("zigwin32", .{});
         exe.root_module.addImport("win32", win32.module("win32"));
     }
 
