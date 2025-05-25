@@ -1,6 +1,8 @@
 const Args = @This();
 
 const std = @import("std");
+const builtin = @import("builtin");
+
 const utility = @import("utility.zig");
 
 //
@@ -51,7 +53,11 @@ pub fn parse(alloc: std.mem.Allocator) ParseError!Args {
     errdefer args_iter.deinit();
 
     // This should be the first argument
-    local_exe_name = std.fs.path.stem(std.fs.path.basename(args_iter.next().?));
+    if (builtin.mode == .Debug) {
+        local_exe_name = "injector";
+    } else {
+        local_exe_name = std.fs.path.stem(std.fs.path.basename(args_iter.next().?));
+    }
 
     var found_pid: ?u32 = null;
     var found_target: ?[]const u8 = null;
