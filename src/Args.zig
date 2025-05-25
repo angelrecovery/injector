@@ -76,13 +76,13 @@ pub fn parse(alloc: std.mem.Allocator) ParseError!Args {
             }
         }
 
-        if (argExists("--window_title", "-w", arg)) {
+        if (argExists("--window_title", "-wt", arg)) {
             if (args_iter.next()) |window_name| {
                 found_window_name = window_name;
             }
         }
 
-        if (argExists("--window_class", "-c", arg)) {
+        if (argExists("--window_class", "-wc", arg)) {
             if (args_iter.next()) |class_name| {
                 found_class_name = class_name;
             }
