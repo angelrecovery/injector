@@ -8,7 +8,8 @@ const utility = @import("utility.zig");
 //
 target: union(TargetType) {
     pid: u32,
-    window_name: []const u8,
+    window_title: []const u8,
+    window_class: []const u8,
     exe_name: []const u8,
 } = undefined,
 
@@ -19,7 +20,8 @@ lib: []const u8 = undefined,
 /// a class name, or the executable name of a target process
 const TargetType = enum(u2) {
     pid,
-    window_name,
+    window_title,
+    window_class,
     exe_name,
 };
 
@@ -62,6 +64,7 @@ pub fn parse(alloc: std.mem.Allocator) ParseError!Args {
     var found_pid: ?u32 = null;
     var found_window_name: ?[]const u8 = null;
     var found_exe_name: ?[]const u8 = null;
+    var found_class_name: ?[]const u8 = null;
     var found_lib: ?[]const u8 = null;
 
     while (args_iter.next()) |arg| {
@@ -73,9 +76,15 @@ pub fn parse(alloc: std.mem.Allocator) ParseError!Args {
             }
         }
 
-        if (argExists("--window", "-w", arg)) {
+        if (argExists("--window_title", "-w", arg)) {
             if (args_iter.next()) |window_name| {
                 found_window_name = window_name;
+            }
+        }
+
+        if (argExists("--window_class", "-c", arg)) {
+            if (args_iter.next()) |class_name| {
+                found_class_name = class_name;
             }
         }
 
@@ -98,7 +107,8 @@ pub fn parse(alloc: std.mem.Allocator) ParseError!Args {
     const target_count =
         @intFromBool(found_pid != null) +
         @intFromBool(found_window_name != null) +
-        @intFromBool(found_exe_name != null);
+        @intFromBool(found_exe_name != null) +
+        @intFromBool(found_class_name != null);
 
     if (target_count == 0) {
         return error.MissingTarget;
@@ -111,9 +121,11 @@ pub fn parse(alloc: std.mem.Allocator) ParseError!Args {
     if (found_pid) |pid| {
         parsed.target = .{ .pid = pid };
     } else if (found_window_name) |window_name| {
-        parsed.target = .{ .window_name = window_name };
+        parsed.target = .{ .window_title = window_name };
     } else if (found_exe_name) |exe_name| {
         parsed.target = .{ .exe_name = exe_name };
+    } else if (found_class_name) |class_name| {
+        parsed.target = .{ .window_class = class_name };
     }
 
     if (found_lib) |lib| {

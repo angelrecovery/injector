@@ -26,22 +26,23 @@ pub fn main() !void {
 
     const target_pid = switch (args.target) {
         .pid => args.target.pid,
-        .window_name => utility.getPidByWindow(
+        .window_title => utility.getPidByWindow(
             arena_alloc,
-            args.target.window_name,
+            args.target.window_title,
             .window_title,
         ) catch {
             utility.logErrWin(arena_alloc, "failed to find target (window title search)", .{});
             return;
         },
-        .exe_name => utility.getPidByWindow(
+        .window_class => utility.getPidByWindow(
             arena_alloc,
-            args.target.exe_name,
-            .window_title,
+            args.target.window_class,
+            .window_class,
         ) catch {
-            utility.logErrWin(arena_alloc, "failed to find target (window title search)", .{});
+            utility.logErrWin(arena_alloc, "failed to find target (window class search)", .{});
             return;
         },
+        .exe_name => unreachable,
     };
 
     injector.init(arena_alloc, target_pid) catch |err| {
