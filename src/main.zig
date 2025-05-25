@@ -68,5 +68,5 @@ pub fn main() !void {
 }
 
 inline fn printUsage() void {
-    std.debug.print("\nUsage: {s} --target <pid,exe_name,window_title,class_name> --lib <shared_library_path>\n", .{Args.local_exe_name});
+    std.debug.print("\nUsage: {s} (--pid,--exe,--window) --lib <shared_library_path>\n", .{Args.local_exe_name});
 }

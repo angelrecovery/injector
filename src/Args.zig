@@ -60,21 +60,28 @@ pub fn parse(alloc: std.mem.Allocator) ParseError!Args {
     }
 
     var found_pid: ?u32 = null;
-    var found_target: ?[]const u8 = null;
+    var found_window_name: ?[]const u8 = null;
+    var found_exe_name: ?[]const u8 = null;
     var found_lib: ?[]const u8 = null;
 
     while (args_iter.next()) |arg| {
-        if (argExists("--target", "-t", arg)) {
-            if (args_iter.next()) |target| {
-                // If we can parse this argument as an integer, the user provided
-                // the pid directly
-                const parsed_pid = std.fmt.parseInt(u32, target, 10) catch null;
+        if (argExists("--pid", "-p", arg)) {
+            if (args_iter.next()) |pid_str| {
+                found_pid = std.fmt.parseInt(u32, pid_str, 10) catch {
+                    return error.InvalidTarget;
+                };
+            }
+        }
 
-                if (parsed_pid) |pid| {
-                    found_pid = pid;
-                } else {
-                    found_target = target;
-                }
+        if (argExists("--window", "-w", arg)) {
+            if (args_iter.next()) |window_name| {
+                found_window_name = window_name;
+            }
+        }
+
+        if (argExists("--exe", "-e", arg)) {
+            if (args_iter.next()) |exe_name| {
+                found_exe_name = exe_name;
             }
         }
 
@@ -87,18 +94,26 @@ pub fn parse(alloc: std.mem.Allocator) ParseError!Args {
 
     var parsed = Args{};
 
+    // Ensure only one target type is specified
+    const target_count =
+        @intFromBool(found_pid != null) +
+        @intFromBool(found_window_name != null) +
+        @intFromBool(found_exe_name != null);
+
+    if (target_count == 0) {
+        return error.MissingTarget;
+    }
+
+    if (target_count > 1) {
+        return error.InvalidTarget;
+    }
+
     if (found_pid) |pid| {
         parsed.target = .{ .pid = pid };
-    } else if (found_target) |target| {
-        // The user provided either a window name or an exe name
-        // Now we determine which one
-        if (utility.stringEndsWith(target, ".exe")) {
-            parsed.target = .{ .exe_name = target };
-        } else {
-            parsed.target = .{ .window_name = target };
-        }
-    } else {
-        return error.MissingTarget;
+    } else if (found_window_name) |window_name| {
+        parsed.target = .{ .window_name = window_name };
+    } else if (found_exe_name) |exe_name| {
+        parsed.target = .{ .exe_name = exe_name };
     }
 
     if (found_lib) |lib| {
