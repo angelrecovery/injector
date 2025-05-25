@@ -2,6 +2,8 @@ const std = @import("std");
 const utility = @import("utility.zig");
 const win32 = @import("win32").everything;
 
+const log = std.log.scoped(.injector);
+
 /// Thread creation method for LoadLibrary injections
 /// create_remote_thread by default
 const ThreadMethod = enum(u2) {
@@ -22,6 +24,8 @@ const State = struct {
 
     /// Ptr to the LoadLibrary function
     ll_fn: *const fn () callconv(.c) isize = undefined,
+    /// Ptr to the FreeLibrary function
+    fl_fn: *const fn () callconv(.c) isize = undefined,
 
     remote_thread_exit_code: u32 = undefined,
 };
@@ -41,7 +45,9 @@ const InjectError = error{
     TimedOut,
 };
 
-const EjectError = error{};
+const EjectError = error{
+    NoFreeLibrary,
+};
 
 // Stuff that needs to happen regardless of if
 // we're injecting or ejecting
@@ -73,6 +79,8 @@ pub inline fn deinit() void {
 }
 
 pub fn inject(lib: []const u8, thread_method: ThreadMethod) InjectError!void {
+    defer log.info("finished", .{});
+
     state.ll_fn = win32.GetProcAddress(state.kernel32, "LoadLibraryA") orelse return error.NoLoadLibrary;
 
     _ = thread_method;
@@ -116,19 +124,21 @@ pub fn inject(lib: []const u8, thread_method: ThreadMethod) InjectError!void {
     }
 
     if (state.remote_thread_exit_code != 0) {
-        std.log.warn("ll thread exited with code {d}, the injection may have failed", .{state.remote_thread_exit_code});
+        log.warn("ll thread exited with code {d}, the injection may have failed", .{state.remote_thread_exit_code});
     }
-
-    std.log.info("finished", .{});
 }
 
-pub fn eject(thread_method: ThreadMethod) EjectError!void {
+pub fn eject(lib: []const u8, thread_method: ThreadMethod) EjectError!void {
+    defer log.info("finished", .{});
+
+    state.fl_fn = win32.GetProcAddress(state.kernel32, "FreeLibrary") orelse return error.NoFreeLibrary;
+
+    _ = lib;
     _ = thread_method;
-    unreachable;
 }
 
 fn checkLlThreadFinished(handle: win32.HANDLE) void {
-    std.log.info("waiting on remote thread...", .{});
+    log.info("waiting on remote thread...", .{});
     defer std.debug.print("\n", .{});
 
     while (true) {
