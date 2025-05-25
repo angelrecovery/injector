@@ -1,7 +1,6 @@
 const std = @import("std");
+const utility = @import("utility.zig");
 const win32 = @import("win32").everything;
-
-pub const PidType = u32;
 
 /// Thread creation method for LoadLibrary injections
 /// create_remote_thread by default
@@ -11,110 +10,44 @@ const ThreadMethod = enum(u2) {
     rtl_create_user_thread,
 };
 
-/// Used to store the exit code of remote threads for
-/// LoadLibrary injections
-var ll_remote_thread_exit_code: u32 = undefined;
+const State = struct {
+    alloc: std.mem.Allocator = undefined,
 
-const PidErrorWindow = error{
-    FailedSearch,
-    FailedFetch,
+    target_pid: u32 = undefined,
+
+    target_handle: ?win32.HANDLE = undefined,
+
+    /// Module handle to kernel32.dll
+    kernel32: ?win32.HINSTANCE = undefined,
+
+    /// Ptr to the LoadLibrary function
+    ll_fn: *const fn () callconv(.c) isize = undefined,
+
+    remote_thread_exit_code: u32 = undefined,
 };
+var state: State = .{};
 
-const PidErrorExe = error{
-    FailedSnapshot,
-    FailedSearch,
-};
-
-const LoadLibraryError = error{
+const InitError = error{
     FailedOpen,
-    FailedKernel32,
-    FailedLoadLibrary,
-    FailedAlloc,
+    NoKernel32,
+};
+
+const InjectError = error{
+    NoLoadLibrary,
+    FailedVirtualAlloc,
     FailedWrite,
-    FailedRemoteHandle,
+    FailedCreateThread,
+    FailedCheckerThread,
     TimedOut,
 };
 
-// const MMapError = error{};
+const EjectError = error{};
 
-/// Simply check if a handle is valid before closing it
-inline fn closeHandle(handle: ?win32.HANDLE) void {
-    if (handle) |h| {
-        _ = win32.CloseHandle(h);
-    }
-}
-
-fn checkLlThreadFinished(handle: win32.HANDLE) void {
-    std.log.info("waiting on remote thread...", .{});
-
-    while (true) {
-        defer std.debug.print("\n", .{});
-
-        std.Thread.sleep(100 * std.time.ns_per_ms);
-        std.debug.print(".", .{});
-
-        if (win32.GetExitCodeThread(handle, &ll_remote_thread_exit_code) == 0) {
-            std.log.warn("\nfailed to get exit code of remote thread", .{});
-            break;
-        }
-
-        if (ll_remote_thread_exit_code == win32.STILL_ACTIVE) {
-            continue;
-        }
-    }
-}
-
-// pub fn getPidByWindowTitle(allocator: std.mem.Allocator, title: []const u8) !PidType {
-//     const wide_title = try std.unicode.utf8ToUtf16LeAllocZ(allocator, title);
-//
-//     const window = win32.FindWindowW(null, wide_title);
-//
-//     if (window == null) {
-//         return error.FailedSearch;
-//     }
-//
-//     var pid: PidType = undefined;
-//
-//     if (win32.GetWindowThreadProcessId(window, &pid) == 0) {
-//         return error.FailedFetch;
-//     }
-//
-//     return pid;
-// }
-
-// pub fn getPidByExeName(allocator: std.mem.Allocator, name: []const u8) PidErrorExe!PidType {
-//     const snapshot = win32.CreateToolHelp32Snapshot(.TH32CS_SNAPPROCESS, 0);
-//
-//     if (snapshot == .INVALID_HANDLE_VALUE) {
-//         return error.FailedSnapshot;
-//     }
-//
-//     defer closeHandle(snapshot);
-//
-//     var entry = win32.PROCESSENTRY32{};
-//     entry.dwSize = @sizeOf(win32.PROCESSENTRY32);
-//
-//     if (!win32.Process32First(snapshot, &entry)) {
-//         return error.FailedSearch;
-//     }
-//
-//     const wide_name = std.unicode.utf8ToUtf16LeAlloc(allocator, name);
-//     var pid: PidType = undefined;
-//
-//     while (win32.Process32Next(snapshot, &entry)) {
-//         if (std.mem.eql(entry.szExeFile[0..name.len], wide_name)) {
-//             pid = entry.dwProcessId;
-//             break;
-//         }
-//     }
-//
-//     return pid;
-// }
-
-pub fn loadLibraryInject(pid: PidType, lib: []const u8, method: ThreadMethod) !void {
-    // const createThreadMethod = getThreadMethod(method);
-    _ = method;
-    const createThreadMethod = win32.CreateRemoteThread;
+// Stuff that needs to happen regardless of if
+// we're injecting or ejecting
+pub fn init(alloc: std.mem.Allocator, pid: u32) InitError!void {
+    state.alloc = alloc;
+    state.target_pid = pid;
 
     const process_access_rights = win32.PROCESS_ACCESS_RIGHTS{
         .CREATE_THREAD = 1,
@@ -124,63 +57,91 @@ pub fn loadLibraryInject(pid: PidType, lib: []const u8, method: ThreadMethod) !v
         .VM_READ = 1,
     };
 
-    const process = win32.OpenProcess(process_access_rights, win32.FALSE, pid);
+    state.target_handle = win32.OpenProcess(process_access_rights, win32.FALSE, state.target_pid);
 
-    if (process == null) {
+    if (state.target_handle == null) {
         return error.FailedOpen;
     }
 
-    defer closeHandle(process);
+    errdefer utility.closeHandle(state.target_handle);
 
-    const kernel32 = win32.GetModuleHandleA("kernel32.dll");
+    state.kernel32 = win32.GetModuleHandleA("kernel32.dll") orelse return error.NoKernel32;
+}
 
-    if (kernel32 == null) {
-        return error.FailedKernel32;
-    }
+pub inline fn deinit() void {
+    utility.closeHandle(state.target_handle);
+}
 
-    const loadlib = win32.GetProcAddress(kernel32, "LoadLibraryA");
+pub fn inject(lib: []const u8, thread_method: ThreadMethod) InjectError!void {
+    state.ll_fn = win32.GetProcAddress(state.kernel32, "LoadLibraryA") orelse return error.NoLoadLibrary;
 
-    if (loadlib == null) {
-        return error.FailedLoadLibrary;
-    }
+    _ = thread_method;
 
-    const path_alloc = win32.VirtualAllocEx(process, null, lib.len, .{ .RESERVE = 1, .COMMIT = 1 }, win32.PAGE_READWRITE);
+    const createThreadMethod = win32.CreateRemoteThread;
+
+    const path_alloc = win32.VirtualAllocEx(state.target_handle, null, lib.len, .{ .RESERVE = 1, .COMMIT = 1 }, win32.PAGE_READWRITE);
 
     if (path_alloc == null) {
-        return error.FailedAlloc;
+        return error.FailedVirtualAlloc;
     }
 
     defer {
-        const free_status = win32.VirtualFreeEx(process, path_alloc, 0, win32.MEM_RELEASE);
+        const free_status = win32.VirtualFreeEx(state.target_handle, path_alloc, 0, win32.MEM_RELEASE);
         if (free_status == 0) {
-            std.log.warn("failed to free memory in target for sl path", .{});
+            utility.logErrWin(state.alloc, "failed to free memory in target for sl path", .{});
         }
     }
 
-    if (win32.WriteProcessMemory(process, path_alloc, lib.ptr, lib.len, null) == 0) {
+    if (win32.WriteProcessMemory(state.target_handle, path_alloc, lib.ptr, lib.len, null) == 0) {
         return error.FailedWrite;
     }
 
-    const remote_thread = createThreadMethod(process, null, 0, @ptrCast(loadlib), path_alloc, 0, null);
+    const ll_thread = createThreadMethod(state.target_handle, null, 0, @ptrCast(state.ll_fn), path_alloc, 0, null);
 
-    if (remote_thread == null) {
-        return error.FailedRemoteHandle;
+    if (ll_thread == null) {
+        return error.FailedCreateThread;
     }
 
-    defer closeHandle(remote_thread);
+    defer utility.closeHandle(ll_thread);
 
-    const ticker_thread = try std.Thread.spawn(.{}, checkLlThreadFinished, .{remote_thread.?});
-    ticker_thread.detach();
+    const checker_thread = std.Thread.spawn(.{}, checkLlThreadFinished, .{ll_thread.?}) catch {
+        return error.FailedCheckerThread;
+    };
+    checker_thread.detach();
 
-    const wait_status = win32.WaitForSingleObject(remote_thread.?, 10000);
+    const wait_status = win32.WaitForSingleObject(ll_thread.?, 15000);
 
     if (wait_status == 0x00000102) {
         return error.TimedOut;
     }
 
-    if (ll_remote_thread_exit_code != 0) {
-        std.log.warn("remote thread exited with code {d}, the injection may have failed", .{ll_remote_thread_exit_code});
+    if (state.remote_thread_exit_code != 0) {
+        std.log.warn("ll thread exited with code {d}, the injection may have failed", .{state.remote_thread_exit_code});
     }
 
     std.log.info("finished", .{});
+}
+
+pub fn eject(thread_method: ThreadMethod) EjectError!void {
+    _ = thread_method;
+    unreachable;
+}
+
+fn checkLlThreadFinished(handle: win32.HANDLE) void {
+    std.log.info("waiting on remote thread...", .{});
+    defer std.debug.print("\n", .{});
+
+    while (true) {
+        std.Thread.sleep(100 * std.time.ns_per_ms);
+        std.debug.print(".", .{});
+
+        if (win32.GetExitCodeThread(handle, &state.remote_thread_exit_code) == 0) {
+            utility.logErrWin(state.alloc, "\nfailed to get exit code of remote thread", .{});
+            break;
+        }
+
+        if (state.remote_thread_exit_code == win32.STILL_ACTIVE) {
+            continue;
+        }
+    }
 }

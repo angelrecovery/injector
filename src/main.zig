@@ -1,4 +1,5 @@
 const std = @import("std");
+const utility = @import("utility.zig");
 const injector = @import("injector.zig");
 const Args = @import("Args.zig");
 
@@ -6,13 +7,14 @@ pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
 
-    const alloc = arena.allocator();
+    const arena_alloc = arena.allocator();
 
-    const args = Args.parse(alloc) catch |err| {
+    var args = Args.parse(arena_alloc) catch |err| {
         switch (err) {
             error.FailedAlloc => std.log.err("failed to allocate memory for args", .{}),
             error.MissingLib => std.log.err("no shared library supplied", .{}),
-            error.MissingPid => std.log.err("no target supplied", .{}),
+            error.MissingTarget => std.log.err("no target supplied", .{}),
+            error.InvalidLib => std.log.err("invalid library suppllied", .{}),
             error.InvalidTarget => std.log.err("invalid target supplied", .{}),
             else => unreachable,
         }
@@ -20,23 +22,51 @@ pub fn main() !void {
         printUsage();
         return;
     };
+    defer args.deinit();
 
-    std.log.info("target: {d}", .{args.pid});
-    std.log.info("library: {s}", .{args.lib});
+    const target_pid = switch (args.target) {
+        .pid => args.target.pid,
+        .window_name => utility.getPidByWindow(
+            arena_alloc,
+            args.target.window_name,
+            .window_title,
+        ) catch {
+            utility.logErrWin(arena_alloc, "failed to find target (window title search)", .{});
+            return;
+        },
+        .exe_name => utility.getPidByWindow(
+            arena_alloc,
+            args.target.exe_name,
+            .window_title,
+        ) catch {
+            utility.logErrWin(arena_alloc, "failed to find target (window title search)", .{});
+            return;
+        },
+    };
 
-    injector.loadLibraryInject(args.pid, args.lib, .create_remote_thread) catch |err| {
+    injector.init(arena_alloc, target_pid) catch |err| {
         switch (err) {
-            error.FailedOpen => std.log.err("failed to open handle to target", .{}),
-            error.FailedKernel32 => std.log.err("failed to fetch kernel32.dll", .{}),
-            error.FailedLoadLibrary => std.log.err("failed to fetch ll", .{}),
-            error.FailedAlloc => std.log.err("failed to allocate memory for library path in target", .{}),
-            error.FailedWrite => std.log.err("failed to write library to target", .{}),
-            error.FailedRemoteHandle => std.log.err("failed to open remote handle in target", .{}),
+            error.FailedOpen => utility.logErrWin(arena_alloc, "failed to open handle to target", .{}),
+            error.NoKernel32 => utility.logErrWin(arena_alloc, "failed to fetch kernel32.dll", .{}),
+            else => unreachable,
+        }
+        return;
+    };
+    defer injector.deinit();
+
+    injector.inject(args.lib, .create_remote_thread) catch |err| {
+        switch (err) {
+            error.NoLoadLibrary => utility.logErrWin(arena_alloc, "failed to fetch ll", .{}),
+            error.FailedVirtualAlloc => utility.logErrWin(arena_alloc, "failed to allocate memory for library path in target", .{}),
+            error.FailedWrite => utility.logErrWin(arena_alloc, "failed to write library path to target", .{}),
+            error.FailedCreateThread => utility.logErrWin(arena_alloc, "failed to create thread in target", .{}),
+            error.FailedCheckerThread => utility.logErrWin(arena_alloc, "failed to create thread checker", .{}),
+            error.TimedOut => utility.logErrWin(arena_alloc, "thread timed out", .{}),
             else => unreachable,
         }
     };
 }
 
 inline fn printUsage() void {
-    std.debug.print("\nUsage: {s} --target <pid> --lib <shared_library_path>\n", .{Args.name_on_disk});
+    std.debug.print("\nUsage: {s} --target <pid,exe_name,window_title,class_name> --lib <shared_library_path>\n", .{Args.local_exe_name});
 }
