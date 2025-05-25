@@ -16,6 +16,7 @@ pub inline fn stringEndsWith(str: []const u8, suffix: []const u8) bool {
 }
 
 /// Print an error with the last windows error under it
+/// https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--0-499-
 pub inline fn logErrWin(allocator: std.mem.Allocator, comptime fmt: []const u8, args: anytype) void {
     const last_error: u32 = @intFromEnum(win32.GetLastError());
 

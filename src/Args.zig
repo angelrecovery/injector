@@ -16,7 +16,7 @@ target: union(TargetType) {
 lib: []const u8 = undefined,
 //
 
-/// The user can provide either a pid, a window name,
+/// The user can provide either a pid, a window title,
 /// a class name, or the executable name of a target process
 const TargetType = enum(u2) {
     pid,

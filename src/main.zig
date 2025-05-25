@@ -3,6 +3,8 @@ const utility = @import("utility.zig");
 const injector = @import("injector.zig");
 const Args = @import("Args.zig");
 
+pub const log_level: std.log.Level = .info;
+
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
