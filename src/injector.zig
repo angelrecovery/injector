@@ -27,6 +27,7 @@ const State = struct {
     /// Ptr to the FreeLibrary function
     fl_fn: *const fn () callconv(.c) isize = undefined,
 
+    /// Exit code
     remote_thread_exit_code: u32 = undefined,
 };
 var state: State = .{};
@@ -71,6 +72,7 @@ pub fn init(alloc: std.mem.Allocator, pid: u32) InitError!void {
 
     errdefer utility.closeHandle(state.target_handle);
 
+    // kernel32.dll is where some functions we need live
     state.kernel32 = win32.GetModuleHandleA("kernel32.dll") orelse return error.NoKernel32;
 }
 
@@ -81,12 +83,14 @@ pub inline fn deinit() void {
 pub fn inject(lib: []const u8, thread_method: ThreadMethod) InjectError!void {
     defer log.info("finished", .{});
 
+    // Get `LoadLibrary` from kernel32.dll
     state.ll_fn = win32.GetProcAddress(state.kernel32, "LoadLibraryA") orelse return error.NoLoadLibrary;
 
     _ = thread_method;
 
     const createThreadMethod = win32.CreateRemoteThread;
 
+    // Allocate space for the shared library path in the target process
     const path_alloc = win32.VirtualAllocEx(state.target_handle, null, lib.len, .{ .RESERVE = 1, .COMMIT = 1 }, win32.PAGE_READWRITE);
 
     if (path_alloc == null) {
@@ -100,10 +104,13 @@ pub fn inject(lib: []const u8, thread_method: ThreadMethod) InjectError!void {
         }
     }
 
+    // Write shared library path to target
     if (win32.WriteProcessMemory(state.target_handle, path_alloc, lib.ptr, lib.len, null) == 0) {
         return error.FailedWrite;
     }
 
+    // Create a thread in the target process that calls `LoadLibrary`
+    // with the shared library path as the passed argument
     const ll_thread = createThreadMethod(state.target_handle, null, 0, @ptrCast(state.ll_fn), path_alloc, 0, null);
 
     if (ll_thread == null) {
@@ -117,6 +124,7 @@ pub fn inject(lib: []const u8, thread_method: ThreadMethod) InjectError!void {
     };
     checker_thread.detach();
 
+    // Wait up to 15 seconds for the thread to finish
     const wait_status = win32.WaitForSingleObject(ll_thread.?, 15000);
 
     if (wait_status == 0x00000102) {
@@ -131,6 +139,7 @@ pub fn inject(lib: []const u8, thread_method: ThreadMethod) InjectError!void {
 pub fn eject(lib: []const u8, thread_method: ThreadMethod) EjectError!void {
     defer log.info("finished", .{});
 
+    // Get `FreeLibrary` from kernel32.dll
     state.fl_fn = win32.GetProcAddress(state.kernel32, "FreeLibrary") orelse return error.NoFreeLibrary;
 
     _ = lib;
